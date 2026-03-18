@@ -295,6 +295,24 @@
 				status = "disabled";
 			};
 		};
+
+		usb_otg_fs: usb_otg@50040000 {
+			compatible = "infineon,xmc4xxx-usb-otg", "snps,dwc2";
+			reg = <0x50040000 DT_SIZE_K(256)>;
+			status = "disabled";
+			interrupts = <107 1>;
+			interrupt-parent = <&intc>;  // Check?
+			// I think we need proper SCU support properly in zephyr for this?
+			//clocks = <&clock ESP32_USB_MODULE>;  // this is _not_ the clock...
+			//clocks = <&rcc STM32_CLOCK(AHB2, 7)>, <&rcc STM32_SRC_PLL_Q NO_SEL>;
+
+			num-out-eps = <7>;
+			num-in-eps = <7>;
+			/* Extracted from tinyusb */
+			ghwcfg1 = <0x00000000>;
+			ghwcfg2 = <0x228F5930>;
+			ghwcfg4 = <0xDBF08030>;
+		};
 	};
 };
 
