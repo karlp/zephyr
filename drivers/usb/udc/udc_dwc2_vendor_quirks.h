@@ -714,6 +714,125 @@ DT_INST_FOREACH_STATUS_OKAY(QUIRK_ESP32_USB_OTG_DEFINE)
 
 #endif /*DT_HAS_COMPAT_STATUS_OKAY(espressif_esp32_usb_otg) */
 
+#if DT_HAS_COMPAT_STATUS_OKAY(infineon_xmc4xxx_usb_otg)
+
+#include <zephyr/logging/log.h>
+
+#include <xmc_scu.h>
+
+	static inline int ifx_xmc4x_fsotg_pre_tusb_style(const struct device *dev)
+	{
+		// do things as my modus toolbox does, just hard setup in that order.
+		// not the order specced by the ref man
+		XMC_SCU_POWER_EnableUsb();
+		/* De-assert Reset from USB controller */
+		XMC_SCU_RESET_DeassertPeripheralReset(XMC_SCU_PERIPHERAL_RESET_USB0);
+
+
+		//LOG_MODULE_DECLARE(udc_dwc2, CONFIG_UDC_DRIVER_LOG_LEVEL);
+		//LOG_WRN("quirk pre-enable");
+		// xmc48 ref 17.18,
+		// 1. release reset...
+
+
+		// 2, enable 48m clock by config usb pll in scu
+		const int CLOCK_USBCLK_SEL = XMC_SCU_CLOCK_USBCLKSRC_USBPLL;
+		const int CLOCK_USBCLK_DIV = 4;
+		const int CLOCK_USBPLL_PDIV = 1;
+		const int CLOCK_USBPLL_NDIV = 32;
+		// ripping off cycfg_system.c..... until we can setup the rest of device treeeee
+		/* USB/SDMMC source clock */
+		XMC_SCU_CLOCK_SetUsbClockSource(CLOCK_USBCLK_SEL);  // this is a zero, sets default..
+		/* USB/SDMMC divider setting */
+		XMC_SCU_CLOCK_SetUsbClockDivider(CLOCK_USBCLK_DIV);
+		XMC_SCU_CLOCK_EnableUsbPll();
+		XMC_SCU_CLOCK_StartUsbPll(CLOCK_USBPLL_PDIV, CLOCK_USBPLL_NDIV);
+
+		// LOG_MODULE_DECLARE(udc_dwc2, CONFIG_UDC_DRIVER_LOG_LEVEL);
+		//LOG_WRN("quirk post-enable");
+		// 3. remove phy from power down...
+		// return 0;
+
+		return 0;
+	}
+
+
+	static inline int ifx_xmc4x_fsotg_enable_clk(const struct device *dev)
+	{
+		LOG_MODULE_DECLARE(udc_dwc2, CONFIG_UDC_DRIVER_LOG_LEVEL);
+		//LOG_WRN("quirk pre-enable");
+
+
+		// xmc48 ref 17.18,
+		// 1. release reset...
+		/* De-assert Reset from USB controller */
+		XMC_SCU_RESET_DeassertPeripheralReset(XMC_SCU_PERIPHERAL_RESET_USB0);
+
+		// 2, enable 48m clock by config usb pll in scu
+		XMC_SCU_CLOCK_EnableClock(XMC_SCU_CLOCK_USB);
+		const int CLOCK_USBCLK_SEL = XMC_SCU_CLOCK_USBCLKSRC_USBPLL;
+		const int CLOCK_USBCLK_DIV = 4;
+		const int CLOCK_USBPLL_PDIV = 1;
+		const int CLOCK_USBPLL_NDIV = 32;
+		// ripping off cycfg_system.c..... until we can setup the rest of device treeeee
+		/* USB/SDMMC source clock */
+		XMC_SCU_CLOCK_SetUsbClockSource(CLOCK_USBCLK_SEL);
+		/* USB/SDMMC divider setting */
+		XMC_SCU_CLOCK_SetUsbClockDivider(CLOCK_USBCLK_DIV);
+		XMC_SCU_CLOCK_EnableUsbPll();
+		XMC_SCU_CLOCK_StartUsbPll(CLOCK_USBPLL_PDIV, CLOCK_USBPLL_NDIV);
+
+
+		// LOG_MODULE_DECLARE(udc_dwc2, CONFIG_UDC_DRIVER_LOG_LEVEL);
+		//LOG_WRN("quirk post-enable");
+		// 3. remove phy from power down...
+		// XMC_SCU_POWER_EnableUsb();
+		// // return 0;
+
+		// this was in extern/tinyusb/hw/bsp/xmc4000/family.c
+		// BUt I don't think that's actually what it needed...
+		//XMC_SCU_CLOCK_UngatePeripheralClock(XMC_SCU_PERIPHERAL_CLOCK_USB0);
+
+		return 0;
+	}
+
+	static inline int ifx_xmc4x_fsotg_enable_phy(const struct device *dev)
+	{
+		// LOG_MODULE_DECLARE(udc_dwc2, CONFIG_UDC_DRIVER_LOG_LEVEL);
+		//LOG_WRN("quirk post-enable");
+		// 3. remove phy from power down...
+		XMC_SCU_POWER_EnableUsb();
+		return 0;
+
+	}
+
+
+
+	// this snip is from tinyusb,,, but all of that is in our dt already?
+// 	static const dwc2_controller_t _dwc2_controller[] =
+// {
+//   // Note: XMC has some custom control registers before DWC registers
+//   { .reg_base = USB0_BASE, .irqnum = USB0_0_IRQn, .ep_count = DWC2_EP_MAX, .ep_fifo_size = 2048 }
+// };
+
+// I think I need a phy clock? comments say reset won't finish without phy clock.
+
+// Karl - start with empty quirks. (almost zero chance of being true)
+// we're going to try and lift out of xenia what we need to manually add clocks...
+#define QUIRK_INFINEON_XMC4XXX_FSOTG_DEFINE(n)						\
+	const struct dwc2_vendor_quirks dwc2_vendor_quirks_##n = {		\
+		.init = NULL,			\
+		.pre_enable = ifx_xmc4x_fsotg_enable_clk, \
+		.post_enable = ifx_xmc4x_fsotg_enable_phy,			\
+		.disable = NULL,				\
+		.irq_clear = NULL,						\
+	};
+
+DT_INST_FOREACH_STATUS_OKAY(QUIRK_INFINEON_XMC4XXX_FSOTG_DEFINE)
+
+
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(infineon_xmc4xxx_usb_otg) */
+
 /* Add next vendor quirks definition above this line */
 
 #endif /* ZEPHYR_DRIVERS_USB_UDC_DWC2_VENDOR_QUIRKS_H */

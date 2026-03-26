@@ -42,6 +42,16 @@
 		#clock-cells = <0>;
 	};
 
+	/* FIXME
+	 * We don't have CGU support to magically configure this yet,
+	 * but we want to bring up USB to test it out,
+	 */
+	usb_ref_clk: usb_ref_clk {
+ 		compatible = "fixed-clock";
+		clock-frequency = <48000000>;
+ 		#clock-cells = <0>;
+ 	};
+
 	soc {
 		intc: eru@40044000 {
 			compatible = "infineon,xmc4xxx-intc";
@@ -301,18 +311,25 @@
 			reg = <0x50040000 DT_SIZE_K(256)>;
 			status = "disabled";
 			interrupts = <107 1>;
-			interrupt-parent = <&intc>;  // Check?
+			//interrupt-parent = <&intc>;  // Check?  (this explodes dtc anyway...)
 			// I think we need proper SCU support properly in zephyr for this?
 			//clocks = <&clock ESP32_USB_MODULE>;  // this is _not_ the clock...
 			//clocks = <&rcc STM32_CLOCK(AHB2, 7)>, <&rcc STM32_SRC_PLL_Q NO_SEL>;
-
-			num-out-eps = <7>;
-			num-in-eps = <7>;
+			clocks = <&usb_ref_clk>;
+			phys = <&otgfs_phy>; /* do I even need to specify a nop phy?! */
+			num-out-eps = <6>;
+			num-in-eps = <6>;
 			/* Extracted from tinyusb */
 			ghwcfg1 = <0x00000000>;
 			ghwcfg2 = <0x228F5930>;
 			ghwcfg4 = <0xDBF08030>;
 		};
+	};
+
+	// from f4, probably pretty fine?
+	otgfs_phy: otgfs_phy {
+		compatible = "usb-nop-xceiv";
+		#phy-cells = <0>;
 	};
 };
 

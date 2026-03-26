@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# WIP! 
+description: Infineon XMC4xxx USB-OTG (DWC2 compatible controller)
+
+compatible: "infineon,xmc4xxx-usb-otg"
+
+include: ["snps,dwc2.yaml"]
+
+properties:
+  clocks:
+    required: true
