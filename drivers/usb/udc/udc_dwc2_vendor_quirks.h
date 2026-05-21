@@ -748,7 +748,6 @@ DT_INST_FOREACH_STATUS_OKAY(QUIRK_ESP32_USB_OTG_DEFINE)
 		XMC_SCU_CLOCK_EnableUsbPll();
 		XMC_SCU_CLOCK_StartUsbPll(CLOCK_USBPLL_PDIV, CLOCK_USBPLL_NDIV);
 
-		// LOG_MODULE_DECLARE(udc_dwc2, CONFIG_UDC_DRIVER_LOG_LEVEL);
 		//LOG_WRN("quirk post-enable");
 		// 3. remove phy from power down...
 		// return 0;
@@ -760,7 +759,7 @@ DT_INST_FOREACH_STATUS_OKAY(QUIRK_ESP32_USB_OTG_DEFINE)
 	static inline int ifx_xmc4x_fsotg_enable_clk(const struct device *dev)
 	{
 		LOG_MODULE_DECLARE(udc_dwc2, CONFIG_UDC_DRIVER_LOG_LEVEL);
-		//LOG_WRN("quirk pre-enable");
+		LOG_WRN("quirk pre-enable");
 
 
 		// xmc48 ref 17.18,
@@ -769,24 +768,24 @@ DT_INST_FOREACH_STATUS_OKAY(QUIRK_ESP32_USB_OTG_DEFINE)
 		XMC_SCU_RESET_DeassertPeripheralReset(XMC_SCU_PERIPHERAL_RESET_USB0);
 
 		// 2, enable 48m clock by config usb pll in scu
-		XMC_SCU_CLOCK_EnableClock(XMC_SCU_CLOCK_USB);
 		const int CLOCK_USBCLK_SEL = XMC_SCU_CLOCK_USBCLKSRC_USBPLL;
 		const int CLOCK_USBCLK_DIV = 4;
 		const int CLOCK_USBPLL_PDIV = 1;
 		const int CLOCK_USBPLL_NDIV = 32;
 		// ripping off cycfg_system.c..... until we can setup the rest of device treeeee
-		/* USB/SDMMC source clock */
+		// scu.11-34, "The clock divider and the MUX must only be configured while the USB and MMC/SD are not enabled."
+		// These 5 lines are in order as per cycfg_system.c
 		XMC_SCU_CLOCK_SetUsbClockSource(CLOCK_USBCLK_SEL);
-		/* USB/SDMMC divider setting */
 		XMC_SCU_CLOCK_SetUsbClockDivider(CLOCK_USBCLK_DIV);
 		XMC_SCU_CLOCK_EnableUsbPll();
 		XMC_SCU_CLOCK_StartUsbPll(CLOCK_USBPLL_PDIV, CLOCK_USBPLL_NDIV);
+		XMC_SCU_CLOCK_EnableClock(XMC_SCU_CLOCK_USB);
 
 
 		// LOG_MODULE_DECLARE(udc_dwc2, CONFIG_UDC_DRIVER_LOG_LEVEL);
 		//LOG_WRN("quirk post-enable");
 		// 3. remove phy from power down...
-		// XMC_SCU_POWER_EnableUsb();
+		//XMC_SCU_POWER_EnableUsb();
 		// // return 0;
 
 		// this was in extern/tinyusb/hw/bsp/xmc4000/family.c
@@ -798,10 +797,19 @@ DT_INST_FOREACH_STATUS_OKAY(QUIRK_ESP32_USB_OTG_DEFINE)
 
 	static inline int ifx_xmc4x_fsotg_enable_phy(const struct device *dev)
 	{
-		// LOG_MODULE_DECLARE(udc_dwc2, CONFIG_UDC_DRIVER_LOG_LEVEL);
-		//LOG_WRN("quirk post-enable");
+		LOG_MODULE_DECLARE(udc_dwc2, CONFIG_UDC_DRIVER_LOG_LEVEL);
+		LOG_WRN("quirk post-enable");
 		// 3. remove phy from power down...
 		XMC_SCU_POWER_EnableUsb();
+		return 0;
+
+	}
+
+	static inline int ifx_xmc4x_fsotg_disable_phy(const struct device *dev)
+	{
+		LOG_MODULE_DECLARE(udc_dwc2, CONFIG_UDC_DRIVER_LOG_LEVEL);
+		LOG_WRN("quirk disable");
+		XMC_SCU_POWER_DisableUsb();
 		return 0;
 
 	}
@@ -821,8 +829,17 @@ DT_INST_FOREACH_STATUS_OKAY(QUIRK_ESP32_USB_OTG_DEFINE)
 // we're going to try and lift out of xenia what we need to manually add clocks...
 #define QUIRK_INFINEON_XMC4XXX_FSOTG_DEFINE(n)						\
 	const struct dwc2_vendor_quirks dwc2_vendor_quirks_##n = {		\
-		.init = NULL,			\
-		.pre_enable = ifx_xmc4x_fsotg_enable_clk, \
+		.init = ifx_xmc4x_fsotg_enable_clk,			\
+		.pre_enable = NULL, \
+		.post_enable = ifx_xmc4x_fsotg_enable_phy,			\
+		.disable = ifx_xmc4x_fsotg_disable_phy,				\
+		.irq_clear = NULL,						\
+	};
+	// no this is worse.
+#define badQUIRK_INFINEON_XMC4XXX_FSOTG_DEFINE(n)						\
+	const struct dwc2_vendor_quirks dwc2_vendor_quirks_##n = {		\
+		.init = ifx_xmc4x_fsotg_pre_tusb_style,			\
+		.pre_enable = NULL, \
 		.post_enable = ifx_xmc4x_fsotg_enable_phy,			\
 		.disable = NULL,				\
 		.irq_clear = NULL,						\
