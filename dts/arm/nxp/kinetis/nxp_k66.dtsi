@@ -37,5 +37,26 @@
 			number-of-mb = <16>;
 			status = "disabled";
 		};
+
+		usb1: usb@400a1000 {
+			compatible = "nxp,ehci";
+			reg = <0x400a1000 0x1000>;
+			// _at least_
+			clocks = <&sim KINETIS_SIM_CLOCK(KINETIS_SIM_BUS_CLK, 0x1030, 2)>;
+			clock-names = "clk_scgc3";
+			interrupts = <93 0>;
+			interrupt-names = "usbhs_otg";
+			num-bidir-endpoints = <8>;
+			status = "disabled";
+		};
+
+		usbphy: usb-phy@400a2000 {
+			compatible = "nxp,usbphy";
+			reg = <0x400a2000 0x1000>;
+			clocks = <&sim KINETIS_SIM_CLOCK(KINETIS_SIM_BUS_CLK, 0x1030, 3)>;
+			clock-names = "clk_scgc3";
+			status = "disabled";
+		};
+
 	};
 };
