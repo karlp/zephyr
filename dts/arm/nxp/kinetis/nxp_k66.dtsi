@@ -41,20 +41,25 @@
 		usb1: usb@400a1000 {
 			compatible = "nxp,ehci";
 			reg = <0x400a1000 0x1000>;
-			// _at least_
-			clocks = <&sim KINETIS_SIM_CLOCK(KINETIS_SIM_BUS_CLK, 0x1030, 2)>;
-			clock-names = "clk_scgc3";
+			// current mcux_ehci wants to get both as 0/1 _here_ not separately in the phy node
+			clocks = <&sim KINETIS_SIM_CLOCK(KINETIS_SIM_BUS_CLK, 0x1030, 1)>,
+				<&sim KINETIS_SIM_CLOCK(KINETIS_SIM_BUS_CLK, 0x1030, 2)>;
+			//clock-names = "clk_scgc3";
+			// I think it wants a clock-rates?
+			// preinit will set rate if clock and clock-rates.
+			// but no set_rate for anything for kx so no?
+			//clock-rates = <134000000 50000000>;
 			interrupts = <93 0>;
 			interrupt-names = "usbhs_otg";
 			num-bidir-endpoints = <8>;
 			status = "disabled";
 		};
 
-		usbphy: usb-phy@400a2000 {
+		usbphy1: usb-phy@400a2000 {
 			compatible = "nxp,usbphy";
 			reg = <0x400a2000 0x1000>;
-			clocks = <&sim KINETIS_SIM_CLOCK(KINETIS_SIM_BUS_CLK, 0x1030, 3)>;
-			clock-names = "clk_scgc3";
+			//clocks = <&sim KINETIS_SIM_CLOCK(KINETIS_SIM_BUS_CLK, 0x1030, 2)>;
+			//clock-names = "clk_scgc3";
 			status = "disabled";
 		};
 

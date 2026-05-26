@@ -115,6 +115,12 @@ __weak void clock_init(void)
 	CLOCK_EnableUsbfs0Clock(kCLOCK_UsbSrcPll0,
 				DT_PROP(DT_PATH(cpus, cpu_0), clock_frequency));
 #endif
+#if CONFIG_UDC_NXP_EHCI
+	// woooo, k66 you're special!
+	CLOCK_EnableUsbhs0PhyPllClock(kCLOCK_UsbPhySrcExt, 12000000U);  //// nooo, it'ðs a per board setting!
+	// unused, in that there's only one, so arguments are irrelevant.
+	CLOCK_EnableUsbhs0Clock(kCLOCK_UsbSrcUnused, 0);
+#endif
 }
 
 /**

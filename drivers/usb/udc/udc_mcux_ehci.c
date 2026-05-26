@@ -736,20 +736,53 @@ static int udc_mcux_driver_preinit(const struct device *dev)
 		return -ENOMEM;
 	}
 
-	if (config->clock_dev && config->clock_rate) {
-		clock_control_set_rate(
-			config->clock_dev,
-			config->clock_subsys,
-			config->clock_rate
-		);
+	if (config->clock_dev) {
+		// turn it on yo!
+		if (!device_is_ready(config->clock_dev)) {
+			return -ENODEV;
+		}
+
+		err = clock_control_on(config->clock_dev, config->clock_subsys);
+		if (err != 0) {
+			/* Real error occurred */
+			LOG_ERR("Failed to turn on clock: %d: %x", err, config->clock_subsys);
+			return err;
+		}
+		
+		// leave this dangling, shoudl be fine...
+		if (config->clock_rate) {
+			clock_control_set_rate(
+				config->clock_dev,
+				config->clock_subsys,
+				config->clock_rate
+			);
+		}
 	}
 
-	if (config->phy_clock_dev && config->phy_clock_rate) {
-		clock_control_set_rate(
-			config->phy_clock_dev,
-			config->phy_clock_subsys,
-			config->phy_clock_rate
-		);
+	// still problem, phy_clock_dev is not here? I provided a clock ot the phy?
+	// not a phy clock to the ehci?
+	if (config->phy_clock_dev) {
+		if (!device_is_ready(config->phy_clock_dev)) {
+			return -ENODEV;
+		}
+
+		err = clock_control_on(config->phy_clock_dev, config->phy_clock_subsys);
+		if (err != 0) {
+			/* Check if error is due to lack of support */
+			if (err != -ENOSYS) {
+				/* Real error occurred */
+				LOG_ERR("Failed to turn on phy clock: %d", err);
+				return err;
+			}
+		}
+
+	 	if (config->phy_clock_rate) {
+			clock_control_set_rate(
+				config->phy_clock_dev,
+				config->phy_clock_subsys,
+				config->phy_clock_rate
+			);
+		}
 	}
 
 	k_mutex_init(&data->mutex);
@@ -834,6 +867,10 @@ static const usb_device_controller_interface_struct_t udc_mcux_if = {
 	USB_DeviceEhciRecv, USB_DeviceEhciCancel, USB_DeviceEhciControl
 };
 
+// KARL - this _doesn't_ work for k66 which also has ehci...
+// ok, so... can I verify that? just kill this, and use one of my own to see if I'm rioght first?
+// we'll need the same thing for the phy too...
+#if REQUIRE_CLOCK_RATES_FOR_USB
 #define UDC_MCUX_USB_CLK_DEFINE(n)							\
 	.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR_BY_IDX(n, 0)),			\
 	.clock_subsys = (clock_control_subsys_t)					\
@@ -844,7 +881,20 @@ static const usb_device_controller_interface_struct_t udc_mcux_if = {
 	IF_ENABLED(DT_INST_CLOCKS_HAS_IDX(n, 0),					\
 		   (IF_ENABLED(DT_INST_PROP_HAS_IDX(n, clock_rates, 0),			\
 			       (UDC_MCUX_USB_CLK_DEFINE(n)))))
+#else
+#define UDC_MCUX_USB_CLK_DEFINE(n)							\
+	.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR_BY_IDX(n, 0)),			\
+	.clock_subsys = (clock_control_subsys_t)					\
+		DT_INST_CLOCKS_CELL_BY_IDX(n, 0, name),					\
+	.clock_rate = NULL,
 
+#define UDC_MCUX_USB_CLK_DEFINE_OR(n)							\
+	IF_ENABLED(DT_INST_CLOCKS_HAS_IDX(n, 0),					\
+			       (UDC_MCUX_USB_CLK_DEFINE(n)))
+
+#endif
+
+#if REQUIRE_CLOCK_RATES_FOR_USB
 #define UDC_MCUX_USB_PHY_CLK_DEFINE(n)							\
 	.phy_clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR_BY_IDX(n, 1)),		\
 	.phy_clock_subsys = (clock_control_subsys_t)					\
@@ -855,6 +905,18 @@ static const usb_device_controller_interface_struct_t udc_mcux_if = {
 	IF_ENABLED(DT_INST_CLOCKS_HAS_IDX(n, 1),					\
 		   (IF_ENABLED(DT_INST_PROP_HAS_IDX(n, clock_rates, 1),			\
 			       (UDC_MCUX_USB_PHY_CLK_DEFINE(n)))))
+#else
+#define UDC_MCUX_USB_PHY_CLK_DEFINE(n)							\
+	.phy_clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR_BY_IDX(n, 1)),		\
+	.phy_clock_subsys = (clock_control_subsys_t)					\
+		DT_INST_CLOCKS_CELL_BY_IDX(n, 1, name),					\
+	.phy_clock_rate = NULL,
+
+#define UDC_MCUX_USB_PHY_CLK_DEFINE_OR(n)						\
+	IF_ENABLED(DT_INST_CLOCKS_HAS_IDX(n, 1),					\
+			       (UDC_MCUX_USB_PHY_CLK_DEFINE(n)))
+
+#endif
 
 #define UDC_MCUX_PHY_DEFINE(n)								\
 static usb_phy_config_struct_t phy_config_##n = {					\
