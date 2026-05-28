@@ -1488,6 +1488,8 @@ static int mcux_lpuart_init(const struct device *dev)
 	struct uart_config *uart_api_config = &data->uart_config;
 	int err;
 
+	clock_control_on(config->clock_dev, config->clock_subsys);
+
 	uart_api_config->baudrate = config->baud_rate;
 	uart_api_config->parity = config->parity;
 	uart_api_config->stop_bits = UART_CFG_STOP_BITS_1;
