@@ -1,0 +1,586 @@
+/*
+ * Karl Palsson <karl.palsson@marel.com> 2026
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Remember, K32L2A is _not_ really related to K32L2B at all.
+ * see modules/hal/nxp/mcux/mcux-sdk-ng/devices/Kinetis/K32L/periph_mapping.md
+ * for clues as to the different peripheral mixes.
+ */
+
+#include <mem.h>
+#include <freq.h>
+#include <arm/armv6-m.dtsi>
+#include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/clock/kinetis_pcc.h>
+#include <zephyr/dt-bindings/clock/kinetis_sim.h>
+#include <zephyr/dt-bindings/clock/kinetis_scg.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/i2c/i2c.h>
+#include <zephyr/dt-bindings/pwm/pwm.h>
+
+
+/ {
+	chosen {
+		zephyr,flash-controller = &ftfa;
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-m0+";
+			reg = <0>;
+		};
+	};
+
+	sram0: memory@1fff8000 {
+		compatible = "mmio-sram";
+	};
+
+	/* Dummy pinctrl node, filled with pin mux options at board level */
+	pinctrl: pinctrl {
+		compatible = "nxp,port-pinctrl";
+		status = "okay";
+	};
+
+	clocks {
+		osc: osc {
+			compatible = "nxp,mcxc-osc";
+			#clock-cells = <0>;
+			load-capacitance-picofarads = <0>;
+			mode = "external";
+		};
+	};
+
+	// checked for A4
+	temp0: temp0 {
+		compatible = "nxp,kinetis-temperature";
+		io-channels = <&adc0 26>, <&adc0 27>;
+		io-channel-names = "SENSOR", "BANDGAP";
+		bandgap-voltage = <1000000>;
+		vtemp25 = <716000>;
+		sensor-slope-cold = <1620>;
+		sensor-slope-hot = <1620>;
+		status = "disabled";
+	};
+
+	soc {
+
+		// block from ke1x, but needs checking all of ti.
+		edma0: dma-controller@40008000 {
+			compatible = "nxp,mcux-edma";
+			nxp,version = <2>;
+			dma-channels = <16>;
+			dma-requests = <64>;
+			nxp,mem2mem;
+			reg = <0x40008000 0x1000>, <0x40021000 0x1000>;
+			interrupts = <0 0>, <1 0>, <2 0>, <3 0>,
+				     <4 0>, <5 0>, <6 0>, <7 0>,
+				     <8 0>, <9 0>, <10 0>, <11 0>,
+				     <12 0>, <13 0>, <14 0>, <15 0>,
+				     <16 0>;
+			status = "disabled";
+			#dma-cells = <2>;
+		};
+
+		// it's here, but not sure it's the same thing...
+		ftfa: flash-controller@40020000 {
+			compatible = "nxp,kinetis-ftfa";
+			reg = <0x40020000 0x14>;
+			interrupts = <5 0>;
+			status = "disabled";
+			#address-cells = <1>;
+			#size-cells = <1>;
+			fsec = <0xfe>;
+			fopt = <0x3d>;
+			config-field-offset = <0x400>;
+
+			// certainly not sure about this!
+			flash0: flash@0 {
+				compatible = "soc-nv-flash";
+				erase-block-size = <DT_SIZE_K(2)>;
+				write-block-size = <4>;
+			};
+		};
+
+		pcc0: pcc@4007a000 {
+			compatible = "nxp,kinetis-pcc";
+			reg = <0x4007a000 0x1000>;
+			#clock-cells = <2>;
+		};
+
+		pcc1: pcc@400fa000 {
+			compatible = "nxp,kinetis-pcc";
+			reg = <0x400fa000 0x1000>;
+			#clock-cells = <2>;
+		};
+
+		// TODO - pmc from ke1x is probably correct too?
+
+
+		rcm: rcm@4007f000 {
+			compatible = "nxp,rcm-hwinfo";
+			reg = <0x4007f000 0x1000>;
+		};
+
+		// SIM exists, but it's the uuid portions only. THere's SIM_SOPT1 and SOPT1CFG at a different offset though..
+		sim: sim@40075000 {
+			compatible = "nxp,sim-uuid";
+			reg = <0x40075000 0x100>;
+		};
+
+
+		// TODO - from ke1x, but not yet reviewed
+		scg: scg@4007b000 {
+			sosc-mode = <KINETIS_SCG_SOSC_MODE_LOW_POWER>;
+			compatible = "nxp,kinetis-scg";
+			reg = <0x4007b000 0x1000>;
+			#clock-cells = <1>;
+
+			sosc_clk: sosc_clk {
+				compatible = "fixed-clock";
+				status = "disabled";
+				#clock-cells = <0>;
+			};
+
+			// Defaults to 8, can be adjusted if you need
+			sirc_clk: sirc_clk {
+				compatible = "fixed-clock";
+				clock-frequency = <DT_FREQ_M(8)>;
+				#clock-cells = <0>;
+			};
+
+			// defaults to 48, can be adjusted if you need
+			firc_clk: firc_clk {
+				compatible = "fixed-clock";
+				clock-frequency = <DT_FREQ_M(48)>;
+				#clock-cells = <0>;
+			};
+
+			/* NOTE! pll is not an _output_ clock, it's here because it's the source of spll
+			 * and because you configure it's dividers to create spll */
+			 // (Honestly, that seems like adding dts nodes for no fucking reason. just configure spll?)
+			pll: pll {
+				compatible = "fixed-factor-clock";
+				clocks = <&sosc_clk>;
+				clock-div = <1>;
+				clock-mult = <16>;
+				#clock-cells = <0>;
+			};
+
+			// do I really have pll _and_ spll?
+			spll_clk: spll_clk {
+				compatible = "fixed-factor-clock";
+				clocks = <&pll>;
+				clock-div = <2>;
+				#clock-cells = <0>;
+			};
+
+			core_clk: core_clk {
+				compatible = "fixed-factor-clock";
+				clocks = <&firc_clk>;
+				clock-div = <1>;
+				#clock-cells = <0>;
+			};
+
+			// According to manual, "divslow_clk" is also called "bus_clk" let's not have both!
+			// but the ke1f code we're copying uses bus_clk, and defines both?!
+			bus_clk: bus_clk {
+				compatible = "fixed-factor-clock";
+				clocks = <&core_clk>;
+				clock-div = <1>;
+				#clock-cells = <0>;
+			};
+
+			// slow_clk: slow_clk {
+			// 	// also known as "bus clock" in the manual
+			// 	compatible = "fixed-factor-clock";
+			// 	clocks = <&core_clk>;
+			// 	clock-div = <2>;
+			// 	#clock-cells = <0>;
+			// };
+
+			// I neither know nor care on this one!
+			// clkout_clk: clkout_clk {
+			// 	compatible = "fixed-factor-clock";
+			// 	status = "disabled";
+			// 	clocks = <&firc_clk>;
+			// 	#clock-cells = <0>;
+			// };
+
+			/* Peripheral clocks below here */
+
+			fircdiv1_clk: fircdiv1_clk {
+				compatible = "fixed-factor-clock";
+				clocks = <&firc_clk>;
+				clock-div = <0>;
+				#clock-cells = <0>;
+			};
+
+			fircdiv3_clk: fircdiv3_clk {
+				compatible = "fixed-factor-clock";
+				clocks = <&firc_clk>;
+				clock-div = <0>;
+				#clock-cells = <0>;
+			};
+
+			sircdiv1_clk: sircdiv1_clk {
+				compatible = "fixed-factor-clock";
+				clocks = <&sirc_clk>;
+				clock-div = <0>;
+				#clock-cells = <0>;
+			};
+
+			sircdiv3_clk: sircdiv3_clk {
+				compatible = "fixed-factor-clock";
+				clocks = <&sirc_clk>;
+				clock-div = <0>;
+				#clock-cells = <0>;
+			};
+
+			soscdiv1_clk: soscdiv1_clk {
+				compatible = "fixed-factor-clock";
+				clocks = <&sosc_clk>;
+				clock-div = <0>;
+				#clock-cells = <0>;
+			};
+
+			soscdiv3_clk: soscdiv3_clk {
+				compatible = "fixed-factor-clock";
+				clocks = <&sosc_clk>;
+				clock-div = <0>;
+				#clock-cells = <0>;
+			};
+
+			splldiv1_clk: splldiv1_clk {
+				compatible = "fixed-factor-clock";
+				clocks = <&spll_clk>;
+				clock-div = <0>;
+				#clock-cells = <0>;
+			};
+
+			splldiv3_clk: splldiv3_clk {
+				compatible = "fixed-factor-clock";
+				clocks = <&spll_clk>;
+				clock-div = <0>;
+				#clock-cells = <0>;
+			};
+		};
+
+
+		// TODO base and pcc regs are correct, clock source may be wrong
+		porta: pinmux@4005a000 {
+			compatible = "nxp,port-pinmux";
+			reg = <0x4005a000 0xd0>;
+			clocks = <&pcc0 0x168 KINETIS_PCC_SRC_FIRC_ASYNC>;
+		};
+
+		portb: pinmux@4005b000 {
+			compatible = "nxp,port-pinmux";
+			reg = <0x4005b000 0xd0>;
+			clocks = <&pcc0 0x16c KINETIS_PCC_SRC_FIRC_ASYNC>;
+		};
+
+		portc: pinmux@4005c000 {
+			compatible = "nxp,port-pinmux";
+			reg = <0x4005c000 0xd0>;
+			clocks = <&pcc0 0x170 KINETIS_PCC_SRC_FIRC_ASYNC>;
+		};
+
+		portd: pinmux@4005d000 {
+			compatible = "nxp,port-pinmux";
+			reg = <0x4005d000 0xd0>;
+			clocks = <&pcc0 0x174 KINETIS_PCC_SRC_FIRC_ASYNC>;
+		};
+
+		porte: pinmux@4005e000 {
+			compatible = "nxp,port-pinmux";
+			reg = <0x4005e000 0xd0>;
+			clocks = <&pcc0 0x178 KINETIS_PCC_SRC_FIRC_ASYNC>;
+		};
+
+		gpioa: gpio@4000f000 {
+			compatible = "nxp,kinetis-gpio";
+			status = "disabled";
+			reg = <0x4000f000 0x40>;
+			interrupts = <17 0>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			nxp,kinetis-port = <&porta>;
+		};
+
+		gpiob: gpio@400ff040 {
+			compatible = "nxp,kinetis-gpio";
+			status = "disabled";
+			reg = <0x400ff040 0x40>;
+			interrupts = <18 0>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			nxp,kinetis-port = <&portb>;
+		};
+
+		gpioc: gpio@400ff080 {
+			compatible = "nxp,kinetis-gpio";
+			status = "disabled";
+			reg = <0x400ff080 0x40>;
+			interrupts = <19 0>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			nxp,kinetis-port = <&portc>;
+		};
+
+		gpiod: gpio@400ff0c0 {
+			compatible = "nxp,kinetis-gpio";
+			status = "disabled";
+			reg = <0x400ff0c0 0x40>;
+			interrupts = <20 0>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			nxp,kinetis-port = <&portd>;
+		};
+
+		gpioe: gpio@400ff100 {
+			compatible = "nxp,kinetis-gpio";
+			status = "disabled";
+			reg = <0x400ff100 0x40>;
+			interrupts = <21 0>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			nxp,kinetis-port = <&porte>;
+		};
+
+		// membase and irq are right, unsure about compat. it is a 16bit adc?
+		adc0: adc@40066000 {
+			compatible = "nxp,kinetis-adc16";
+			reg = <0x40066000 0x70>;
+			interrupts = <25 0>;
+			clocks = <&pcc0 0x198 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			status = "disabled";
+			#io-channel-cells = <1>;
+		};
+
+		// mem and irq are right, clocks, not sure.
+		lpi2c0: i2c@400c0000 {
+			compatible = "nxp,lpi2c";
+			clock-frequency = <I2C_BITRATE_STANDARD>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x400c0000 0x1000>;
+			interrupts = <14 0>;
+			clocks = <&pcc1 0x100 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			status = "disabled";
+		};
+
+		lpi2c1: i2c@400c1000 {
+			compatible = "nxp,lpi2c";
+			clock-frequency = <I2C_BITRATE_STANDARD>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x400c1000 0x1000>;
+			interrupts = <15 0>;
+			clocks = <&pcc1 0x104 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			status = "disabled";
+		};
+
+		lpi2c2: i2c@40042000 {
+			compatible = "nxp,lpi2c";
+			clock-frequency = <I2C_BITRATE_STANDARD>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x40042000 0x1000>;
+			//interrupts = <15 0>; // only via intmux, channel 7
+			// correct offset, unsure on best clock
+			clocks = <&pcc0 0x108 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			status = "disabled";
+		};
+
+		lpuart0: uart@400c4000 {
+			compatible = "nxp,lpuart";
+			reg = <0x400c4000 0x1000>;
+			interrupts = <12 0>;
+			clocks = <&pcc1 0x110 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			status = "disabled";
+		};
+
+		lpuart1: uart@400c5000 {
+			compatible = "nxp,lpuart";
+			reg = <0x400c5000 0x1000>;
+			interrupts = <13 0>;
+			clocks = <&pcc1 0x114 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			status = "disabled";
+		};
+
+		lpuart2: uart@40046000 {
+			compatible = "nxp,lpuart";
+			reg = <0x40046000 0x1000>;
+			// interrupts = <13 0>;  // only via intmux, channel 5
+			clocks = <&pcc0 0x118 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			status = "disabled";
+		};
+
+
+		lpit0: lpit@40030000 {
+			compatible = "nxp,lpit";
+			reg = <0x40030000 0x1000>;
+			interrupts = <9 0>;
+			clocks = <&pcc0 0xc0 KINETIS_PCC_SRC_SIRC_ASYNC>;
+			status = "disabled";
+			enable-run-in-doze;
+			max-load-value = <0xffffffff>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			lpit0_channel0: lpit_channel@0 {
+				compatible = "nxp,lpit-channel";
+				reg = <0>;
+				status = "disabled";
+			};
+
+			lpit0_channel1: lpit_channel@1 {
+				compatible = "nxp,lpit-channel";
+				reg = <1>;
+				status = "disabled";
+			};
+
+			lpit0_channel2: lpit_channel@2 {
+				compatible = "nxp,lpit-channel";
+				reg = <2>;
+				status = "disabled";
+			};
+
+			lpit0_channel3: lpit_channel@3 {
+				compatible = "nxp,lpit-channel";
+				reg = <3>;
+				status = "disabled";
+			};
+		};
+
+		lpspi0: spi@400bc000 {
+			compatible = "nxp,lpspi";
+			reg = <0x400bc000 0x1000>;
+			interrupts = <10 0>; 
+			clocks = <&pcc1 0xf0 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			status = "disabled";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			tx-fifo-size = <4>;
+			rx-fifo-size = <4>;
+		};
+
+		lpspi1: spi@400bd000 {
+			compatible = "nxp,lpspi";
+			reg = <0x400bd000 0x1000>;
+			interrupts = <11 0>;
+			clocks = <&pcc1 0xf4 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			status = "disabled";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			tx-fifo-size = <4>;
+			rx-fifo-size = <4>;
+		};
+
+		lpspi2: spi@40038000 {
+			compatible = "nxp,lpspi";
+			reg = <0x40038000 0x1000>;
+			//interrupts = <11 0>;  // intmux channel 4
+			clocks = <&pcc0 0xf8 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			status = "disabled";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			tx-fifo-size = <4>;
+			rx-fifo-size = <4>;
+		};
+
+		lptmr0: lptmr@40034000 {
+			compatible = "nxp,lptmr";
+			reg = <0x40034000 0x1000>;
+			interrupts = <26 0>;
+			clock-frequency = <DT_FREQ_K(1)>;
+			prescale-glitch-filter = <1>;
+			clocks = <&pcc0 0xd0 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			resolution = <16>;
+			status = "disabled";
+		};
+
+		lptmr1: lptmr@400b5000 {
+			compatible = "nxp,lptmr";
+			reg = <0x400b5000 0x1000>;
+			// interrupts = <28 0>; only via intmux, channel 0
+			clocks = <&pcc1 0xd4 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			clock-frequency = <DT_FREQ_K(1)>;
+			prescale-glitch-filter = <1>;
+			resolution = <16>;
+			status = "disabled";
+		};
+
+
+		rtc: rtc@40038000 {
+			compatible = "nxp,rtc";
+			reg = <0x40038000 0x1000>;
+			interrupts = <27 0>; // 
+			// plus, rtc alarm on intmux channel 18, still no idea how to do those...
+			interrupt-names = "seconds";
+			clock-frequency = <32768>;
+			prescaler = <32768>;
+			status = "disabled";
+		};
+
+		// interrupts are done, clocks have correct regs, but maybe not sources bases are done
+		tpm0: pwm@400ac000 {
+			compatible = "nxp,kinetis-tpm";
+			reg = <0x400ac000 0x88>;
+			interrupts = <6 0>;
+			clocks = <&pcc1 0xb0 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			prescaler = <16>;
+			status = "disabled";
+			#pwm-cells = <3>;
+		};
+
+		tpm1: pwm@400ad000 {
+			compatible = "nxp,kinetis-tpm";
+			reg = <0x400ad000 0x88>;
+			interrupts = <6 0>;
+			clocks = <&pcc1 0xb4 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			prescaler = <16>;
+			status = "disabled";
+			#pwm-cells = <3>;
+		};
+
+		tpm2: pwm@4002e000 {
+			compatible = "nxp,kinetis-tpm";
+			reg = <0x4002e000 0x88>;
+			interrupts = <8 0>;
+			clocks = <&pcc0 0xb8 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			prescaler = <16>;
+			status = "disabled";
+			#pwm-cells = <3>;
+		};
+
+		usb: usbd@40055000 {
+			compatible = "nxp,kinetis-usbd";
+			reg = <0x40055000 0x1000>;
+			clocks = <&pcc0 0x154 KINETIS_PCC_SRC_FIRC_ASYNC>;
+			interrupts = <24 0>;  // 1 or 0? I never really rememnber what the second digit is?
+			interrupt-names = "usb";
+			num-bidir-endpoints = <16>;
+			status = "disabled";
+			// USB SRAM is at 0x4010_0000
+		};
+
+	};
+};
+
+&nvic {
+	arm,num-irq-priority-bits = <2>;
+};
+
+&sram0 {
+	reg = <0x1fff8000 DT_SIZE_K(128)>;
+};
+
+&flash0 {
+	reg = <0 DT_SIZE_K(512)>;
+};

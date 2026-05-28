@@ -6,16 +6,29 @@ config SOC_SERIES_K32LX
 	bool
 	select SOC_FAMILY_KINETIS
 
+
+config SOC_SUBSERIES_K32L2A
+	bool
+	select SOC_SERIES_K32LX
+	select CPU_HAS_ARM_MPU
+
+config SOC_SUBSERIES_K32L2B
+	bool
+	select SOC_SERIES_K32LX
+
+# This defines the source folder
 config SOC_SERIES
 	default "k32lx" if SOC_SERIES_K32LX
+	#default "k32l2a" if SOC_SUBSERIES_K32L2A
+	#default "k32l2b" if SOC_SUBSERIES_K32L2B
 
 config SOC_K32L2B31A
 	bool
-	select SOC_SERIES_K32LX
+	select SOC_SUBSERIES_K32L2B
 
 config SOC_K32L2A41A
 	bool
-	select SOC_SERIES_K32LX
+	select SOC_SUBSERIES_K32L2A
 
 config SOC
 	default "k32l2b31a" if SOC_K32L2B31A

@@ -38,6 +38,7 @@ family:
     - name: mke17z9
   - name: k32lx
     socs:
+    - name: k32l2a41a
     - name: k32l2b31a
 runners:
   run_once:

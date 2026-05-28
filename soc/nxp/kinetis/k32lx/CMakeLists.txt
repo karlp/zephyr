@@ -4,6 +4,13 @@
 
 zephyr_include_directories(.)
 
-zephyr_sources(soc.c)
+zephyr_sources_ifdef(
+  CONFIG_SOC_SUBSERIES_K32L2A
+  soc_a.c
+  )
+zephyr_sources_ifdef(
+  CONFIG_SOC_SUBSERIES_K32L2B
+  soc_b.c
+  )
 
 set(SOC_LINKER_SCRIPT ${ZEPHYR_BASE}/include/zephyr/arch/arm/cortex_m/scripts/linker.ld CACHE INTERNAL "")

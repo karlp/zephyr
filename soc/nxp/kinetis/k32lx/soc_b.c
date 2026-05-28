@@ -18,8 +18,8 @@
  ******************************************************************************/
 #define IRC48M_CLK_FREQ (48000000UL)
 
-#define MCG_NODE DT_NODELABEL(mcg)
 #define OSC_NODE DT_NODELABEL(osc)
+#define MCG_NODE DT_NODELABEL(mcg)
 
 #define SIM_MODULE_CLK_SEL_DISABLED     0U /*!< Module clock select: Disabled */
 #define SIM_MODULE_CLK_SEL_IRC48M_CLK   1U /*!< Module clock select: IRC48M clock */
