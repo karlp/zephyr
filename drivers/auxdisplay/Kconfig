@@ -10,6 +10,13 @@ menuconfig AUXDISPLAY
 
 if AUXDISPLAY
 
+config AUXDISPLAY_SHELL
+	bool "AUXDISPLAY shell"
+	depends on SHELL
+	help
+	  Enable the AUXDISPLAY shell with AUXDISPLAY related commands.
+
+
 config AUXDISPLAY_INIT_PRIORITY
 	int "Auxiliary display devices init priority"
 	default 85
